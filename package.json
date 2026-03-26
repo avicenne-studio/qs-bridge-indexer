@@ -1,0 +1,23 @@
+{
+  "name": "qs-bridge-indexer",
+  "version": "0.1.0",
+  "description": "QubicSolanaBridge event indexer — exposes /events and /transactions/:hash for hub and oracle",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --env-file=.env.local src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@qubic-lib/qubic-ts-library": "0.1.6",
+    "better-sqlite3": "^11.0.0",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.4",
+    "typescript": "~5.9.2"
+  }
+}
