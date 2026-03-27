@@ -50,7 +50,6 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          target: production
           push: true
           tags: |
             ${{ secrets.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ steps.env.outputs.workspace }}/hub:${{ github.sha }}
