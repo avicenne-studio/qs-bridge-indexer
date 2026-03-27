@@ -52,8 +52,8 @@ jobs:
           file: Dockerfile
           push: true
           tags: |
-            ${{ secrets.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ steps.env.outputs.workspace }}/hub:${{ github.sha }}
-            ${{ secrets.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ steps.env.outputs.workspace }}/hub:latest
+            ${{ secrets.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ steps.env.outputs.workspace }}/indexer:${{ github.sha }}
+            ${{ secrets.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ steps.env.outputs.workspace }}/indexer:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
