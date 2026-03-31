@@ -117,7 +117,7 @@ export function decodeUnlockOrder(payload: Buffer): UnlockOrder | null {
   const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
 
   return {
-    toAddress:  payload.subarray(32, 64),
+    toAddress:  Uint8Array.prototype.slice.call(payload, 32, 64),
     amount:     view.getBigUint64(128, true).toString(),
     relayerFee: view.getBigUint64(136, true).toString(),
     networkOut: view.getUint32(148, true),
