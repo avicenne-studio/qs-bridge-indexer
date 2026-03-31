@@ -79,6 +79,8 @@ export const stmts = {
   ),
 
   getEventByHash: db.prepare<[string], QsbEventRow>('SELECT * FROM qsb_events WHERE hash = ?'),
+
+  clearEvents: db.prepare('DELETE FROM qsb_events'),
 };
 
 export interface QsbEventRow {

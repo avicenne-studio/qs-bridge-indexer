@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { stmts, getLastIndexedTick, type QsbEventRow } from './db.js';
+import { stmts, getLastIndexedTick, setLastIndexedTick, type QsbEventRow } from './db.js';
 import { config } from './config.js';
 import { decodeLockInput, pubKeyToIdentity, isQsbDestination, decodeUnlockOrder, computeOrderHash } from './qsb-decoder.js';
 
@@ -127,6 +127,18 @@ router.post('/broadcastTransaction', async (req: Request, res: Response) => {
   }
 
   res.json(nodeResponse);
+});
+
+// ── POST /reset ───────────────────────────────────────────────────────────────
+// Resets the indexer cursor so the next poll re-syncs from the node's current epoch.
+// Does NOT wipe event data.
+
+router.post('/reset', (_req: Request, res: Response) => {
+  const before = getLastIndexedTick();
+  stmts.clearEvents.run();
+  setLastIndexedTick(0);
+  console.log(`[reset] full reset — cursor was ${before}, all events cleared`);
+  res.json({ ok: true, before });
 });
 
 // ── GET /status ───────────────────────────────────────────────────────────────
