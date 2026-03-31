@@ -64,7 +64,7 @@ export const stmts = {
   `),
 
   updateUnlockSuccess: db.prepare(
-    `UPDATE qsb_events SET success = ? WHERE hash = ? AND type = 'unlock'`
+    `UPDATE qsb_events SET success = ? WHERE hash = ? AND type = 'unlock' AND success IS NULL`
   ),
 
   getPendingUnlocks: db.prepare<[], { hash: string; tick: number; order_hash: string }>(
