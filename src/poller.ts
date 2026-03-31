@@ -4,6 +4,7 @@ import {
   getLastProcessedTick,
   getTransactionsForTick,
   getProcessedTickIntervals,
+  querySmartContract,
 } from './node-rpc.js';
 import { computeContractIdentity, decodeLockInput, queryOrderEra } from './qsb-decoder.js';
 
@@ -27,7 +28,9 @@ export async function initPoller(): Promise<void> {
 
   setInterval(poll, config.pollIntervalMs);
   setInterval(reconcileOrderEras, 10_000);
+  setInterval(reconcileUnlockSuccess, 10_000);
   poll();
+  reconcileUnlockSuccess();
 }
 
 let polling = false;
@@ -122,6 +125,35 @@ async function indexTick(tick: number): Promise<void> {
   if (toInsert.length > 0) {
     insertMany(toInsert);
     console.log(`[poller] tick ${tick}: ${toInsert.length} QSB Lock event(s) stored`);
+  }
+}
+
+async function reconcileUnlockSuccess(): Promise<void> {
+  const pending = stmts.getPendingUnlocks.all();
+  if (pending.length === 0) return;
+
+  let currentTick: number;
+  try {
+    ({ tickNumber: currentTick } = await getLastProcessedTick());
+  } catch {
+    return; // node not reachable; retry next interval
+  }
+
+  for (const row of pending) {
+    if (currentTick <= row.tick + 5) continue; // tick not yet safely finalized
+
+    try {
+      const res = await querySmartContract(config.qsbContractIndex, 5, row.order_hash);
+      if (!res.responseData) continue;
+
+      const out    = Buffer.from(res.responseData, 'base64');
+      const filled = out.length > 0 && out[0] === 1;
+
+      stmts.updateUnlockSuccess.run(filled ? '1' : '0', row.hash);
+      console.log(`[poller] unlock ${row.hash}: success=${filled}`);
+    } catch {
+      // RPC error — retry next interval
+    }
   }
 }
 
