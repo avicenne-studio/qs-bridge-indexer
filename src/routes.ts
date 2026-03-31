@@ -98,7 +98,9 @@ router.post('/broadcastTransaction', async (req: Request, res: Response) => {
         const order      = decodeUnlockOrder(payloadBuf);
         const hash       = ((nodeResponse.transactionId as string) ?? '').toLowerCase();
 
-        if (order && hash) {
+        if (order && !hash) {
+          console.warn('[broadcast] QSB Unlock decoded but node returned no transactionId — event lost');
+        } else if (order && hash) {
           const sourceId  = await pubKeyToIdentity(header.sourcePubKey);
           const toId      = await pubKeyToIdentity(order.toAddress);
           const orderHash = await computeOrderHash(config.qsbContractIndex, Buffer.from(payloadBuf.subarray(0, 188)));
