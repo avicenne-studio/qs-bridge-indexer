@@ -1,10 +1,8 @@
 name: Deploy Indexer
 
 on:
-  workflow_run:
-    workflows: ["CI"]
+  push:
     branches: [main]
-    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -13,7 +11,7 @@ permissions:
 
 jobs:
   build-push:
-    if: ${{ (github.event_name == 'workflow_dispatch' && (github.ref_name == 'main')) || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    if: ${{ github.ref_name == 'main' }}
     runs-on: ubuntu-latest
     outputs:
       workspace: ${{ steps.env.outputs.workspace }}
@@ -24,7 +22,7 @@ jobs:
       - name: Resolve workspace
         id: env
         run: |
-          BRANCH=${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.workflow_run.head_branch }}
+          BRANCH=${{ github.ref_name }}
           if [[ "$BRANCH" == "main" ]]; then
             echo "workspace=development" >> $GITHUB_OUTPUT
 
