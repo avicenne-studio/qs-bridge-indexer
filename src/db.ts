@@ -33,10 +33,15 @@ db.exec(`
   );
 `);
 
+// Idempotent migrations — ALTER TABLE throws if column exists; that is intentional
+try { db.exec(`ALTER TABLE qsb_events ADD COLUMN order_hash TEXT`);  } catch { /* already exists */ }
+try { db.exec(`ALTER TABLE qsb_events ADD COLUMN success    TEXT`);  } catch { /* already exists */ }
+
 export const stmts = {
   getMeta: db.prepare<[string], { value: string }>('SELECT value FROM meta WHERE key = ?'),
   setMeta: db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)'),
 
+  // Lock events (existing — unchanged)
   insertEvent: db.prepare(`
     INSERT OR IGNORE INTO qsb_events (hash, tick, type, source, to_address, amount, relayer_fee, nonce, network_out, order_era)
     VALUES (@hash, @tick, @type, @source, @toAddress, @amount, @relayerFee, @nonce, @networkOut, @orderEra)
@@ -46,13 +51,34 @@ export const stmts = {
     UPDATE qsb_events SET order_era = ? WHERE hash = ? AND order_era = '0'
   `),
 
-  getAllEvents: db.prepare('SELECT * FROM qsb_events ORDER BY tick ASC'),
+  getPendingOrderEras: db.prepare<[], { hash: string; nonce: string }>(
+    "SELECT hash, nonce FROM qsb_events WHERE type != 'unlock' AND order_era = '0'"
+  ),
+
+  // Unlock events
+  insertUnlockEvent: db.prepare(`
+    INSERT OR IGNORE INTO qsb_events
+      (hash, tick, type, source, to_address, amount, relayer_fee, nonce, network_out, order_era, order_hash)
+    VALUES
+      (@hash, @tick, @type, @source, @toAddress, @amount, @relayerFee, @nonce, @networkOut, @orderEra, @orderHash)
+  `),
+
+  updateUnlockSuccess: db.prepare(
+    `UPDATE qsb_events SET success = ? WHERE hash = ? AND type = 'unlock'`
+  ),
+
+  getPendingUnlocks: db.prepare<[], { hash: string; tick: number; order_hash: string }>(
+    `SELECT hash, tick, order_hash FROM qsb_events WHERE type = 'unlock' AND success IS NULL AND order_hash IS NOT NULL`
+  ),
+
+  // GET /events — unlock rows only appear once success='1'
+  getAllEvents: db.prepare(
+    `SELECT * FROM qsb_events
+     WHERE NOT (type = 'unlock' AND (success IS NULL OR success != '1'))
+     ORDER BY tick ASC`
+  ),
 
   getEventByHash: db.prepare<[string], QsbEventRow>('SELECT * FROM qsb_events WHERE hash = ?'),
-
-  getPendingOrderEras: db.prepare<[], { hash: string; nonce: string }>(
-    "SELECT hash, nonce FROM qsb_events WHERE order_era = '0'"
-  ),
 };
 
 export interface QsbEventRow {
@@ -66,6 +92,8 @@ export interface QsbEventRow {
   nonce:       string;
   network_out: number;
   order_era:   string;
+  order_hash:  string | null;
+  success:     string | null;
   created_at:  string;
 }
 
