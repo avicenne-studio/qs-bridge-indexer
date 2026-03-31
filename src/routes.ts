@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { stmts, getLastIndexedTick, type QsbEventRow } from './db.js';
 import { config } from './config.js';
-import { decodeLockInput, pubKeyToIdentity, isQsbDestination } from './qsb-decoder.js';
+import { decodeLockInput, pubKeyToIdentity, isQsbDestination, decodeUnlockOrder, computeOrderHash } from './qsb-decoder.js';
 
 export const router = Router();
 
@@ -61,11 +61,13 @@ router.post('/broadcastTransaction', async (req: Request, res: Response) => {
     return;
   }
 
-  // Capture QSB Lock event from raw binary
+  // Capture QSB Lock / Unlock event from raw binary
   if (rawBuf.length >= 80) {
     try {
       const header = decodeTxHeader(rawBuf);
+
       if (isQsbDestination(header.destPubKey, config.qsbContractIndex) && header.inputType === 1) {
+        // ── Lock ──
         const payloadBase64 = rawBuf.subarray(80, 80 + header.inputSize).toString('base64');
         const lock = decodeLockInput(payloadBase64);
         const hash = ((nodeResponse.transactionId as string) ?? '').toLowerCase();
@@ -85,6 +87,36 @@ router.post('/broadcastTransaction', async (req: Request, res: Response) => {
             orderEra:   '0',
           });
           console.log(`[broadcast] captured QSB Lock tx ${hash} (nonce=${lock.nonce}, amount=${lock.amount})`);
+        }
+
+      } else if (isQsbDestination(header.destPubKey, config.qsbContractIndex) &&
+                 header.inputType === 3 &&
+                 header.inputSize >= 188 &&
+                 rawBuf.length >= 268) {
+        // ── Unlock ──
+        const payloadBuf = rawBuf.subarray(80, 80 + header.inputSize);
+        const order      = decodeUnlockOrder(payloadBuf);
+        const hash       = ((nodeResponse.transactionId as string) ?? '').toLowerCase();
+
+        if (order && hash) {
+          const sourceId  = await pubKeyToIdentity(header.sourcePubKey);
+          const toId      = await pubKeyToIdentity(order.toAddress);
+          const orderHash = await computeOrderHash(config.qsbContractIndex, Buffer.from(payloadBuf.subarray(0, 188)));
+
+          stmts.insertUnlockEvent.run({
+            hash,
+            tick:       header.tick,
+            type:       'unlock',
+            source:     sourceId ?? '',
+            toAddress:  toId     ?? '',
+            amount:     order.amount,
+            relayerFee: order.relayerFee,
+            nonce:      order.nonce,
+            networkOut: order.networkOut,
+            orderEra:   String(order.orderEra),
+            orderHash:  orderHash ?? null,
+          });
+          console.log(`[broadcast] captured QSB Unlock tx ${hash} (nonce=${order.nonce})`);
         }
       }
     } catch (err: unknown) {
@@ -113,6 +145,19 @@ router.get('/events', (_req: Request, res: Response) => {
 });
 
 function toHubEvent(row: QsbEventRow) {
+  if (row.type === 'unlock') {
+    return {
+      chain:   'qubic' as const,
+      type:    row.type,
+      nonce:   row.nonce,
+      trxHash: row.hash,
+      payload: {
+        toAddress: row.to_address,
+        amount:    row.amount,
+        nonce:     row.nonce,
+      },
+    };
+  }
   return {
     chain:   'qubic' as const,
     type:    row.type,
